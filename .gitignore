@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+.claude/
+yt-dlp.exe
+yt-dlp
