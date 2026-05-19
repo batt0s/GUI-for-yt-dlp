@@ -92,6 +92,18 @@ class App(ctk.CTk):
 
         self._build_ui()
 
+        self.after(500, self._check_ffmpeg)
+
+
+    def _check_ffmpeg(self):
+        if not shutil.which("ffmpeg"):
+            messagebox.showwarning(
+                    "Could not find FFmpeg",
+                    "Could not find FFmpeg on your system!\n\n",
+                    "Some operations might be unsuccessful!",
+                    "Please install FFmpeg and add it to your PATH."
+                    )
+
     # ── UI ────────────────────────────────────────────────────────────────
 
     def _build_ui(self):
