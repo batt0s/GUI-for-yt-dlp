@@ -70,6 +70,19 @@ class App(ctk.CTk):
         self.geometry(APP_SIZE)
         self.minsize(900, 600)
 
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_dir = os.path.join(app_dir, "icons/")
+        try:
+            if sys.platform == "win32":
+                self.iconbitmap(os.path.join(icon_dir, "main.ico"))
+            else:
+                from tkinter import PhotoImage
+                icon_path = os.path.join(icon_dir, "main.png")
+                icon_img = PhotoImage(file=icon_path)
+                self.iconphoto(True, icon_img)
+        except Exception:
+            pass
+
         self.video_info = None
         self.download_dir = DEFAULT_DOWNLOAD_DIR
         self.is_downloading = False
