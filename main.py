@@ -238,14 +238,19 @@ class App(ctk.CTk):
         self.sub_lang_menu.grid(row=13, column=0, sticky="ew", padx=12, pady=(0, 8))
         self.sub_lang_menu.configure(state="disabled")
 
+        self._sb_label(parent, 14, "Playlist")
+        self.playlist_var = ctk.BooleanVar(value=False)
+        self.playlist_switch = ctk.CTkSwitch(parent, text="Download whole playlist", variable=self.playlist_var, command=self._on_playlist_toggle)
+        self.playlist_switch.grid(row=15, column=0, sticky="w", padx=12, pady=(0, 8))
+
         # Download location
-        self._sb_label(parent, 14, "Download Location")
+        self._sb_label(parent, 16, "Download Location")
         self.dir_label = ctk.CTkLabel(parent, text=self._short_path(self.download_dir),
                                       anchor="w", wraplength=230, text_color="gray")
-        self.dir_label.grid(row=15, column=0, sticky="w", padx=12)
+        self.dir_label.grid(row=17, column=0, sticky="w", padx=12)
 
         dir_btn = ctk.CTkButton(parent, text="Browse", width=120, command=self._pick_dir)
-        dir_btn.grid(row=16, column=0, sticky="w", padx=12, pady=(4, 12))
+        dir_btn.grid(row=18, column=0, sticky="w", padx=12, pady=(4, 12))
 
         # Initial state
         self._toggle_audio_widgets(False)
@@ -266,6 +271,11 @@ class App(ctk.CTk):
         self.vfmt_menu.configure(state=vid_state)
         self.afmt_menu.configure(state=aud_state)
         self.aquality_menu.configure(state=aud_state)
+
+    def _on_playlist_toggle(self):
+        url = self.url_entry.get().strip()
+        if url:
+            self._fetch_info()
 
     def _on_sub_toggle(self):
         self.sub_lang_menu.configure(state="normal" if self.sub_var.get() else "disabled")
@@ -306,7 +316,11 @@ class App(ctk.CTk):
 
     def _fetch_worker(self, url):
         try:
-            cmd = [YTDLP, "--dump-json", "--no-download", "--no-playlist", url]
+            cmd = [YTDLP, "-J", "--no-download", url]
+            if self.playlist_var.get():
+                cmd.extend(["--yes-playlist", "--flat-playlist"])
+            else:
+                cmd.append("--no-playlist")
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
                                     startupinfo=_hide_console())
             if result.returncode != 0:
@@ -329,11 +343,23 @@ class App(ctk.CTk):
         self.video_info = None
 
     def _display_info(self, info):
-        self.title_label.configure(text=info.get("title", "?"))
-        self.channel_label.configure(text=info.get("channel", info.get("uploader", "")))
-        dur = fmt_duration(info.get("duration"))
-        self.duration_label.configure(text=f"Duration: {dur}")
-        self._update_quality_options(info)
+        if "entries" in info or info.get("_type") == "playlist":
+            title = info.get("title", "Unknown Playlist")
+            entries = list(info.get("entries", []))
+
+            self.title_label.configure(text=title)
+            self.channel_label.configure(text=f"{info.get('uploader', info.get('channel', ''))} ({len(entries)} video)")
+            self.duration_label.configure(text="Playlist")
+            
+            # Since we cannot iterate over all the videos one by one, we use the defaults
+            self.quality_menu.configure(values=["Best", "2160p", "1440p", "1080p", "720p", "480p", "360p"])
+            self.quality_var.set("Best")
+        else:
+            self.title_label.configure(text=info.get("title", "?"))
+            self.channel_label.configure(text=info.get("channel", info.get("uploader", "")))
+            dur = fmt_duration(info.get("duration"))
+            self.duration_label.configure(text=f"Duration: {dur}")
+            self._update_quality_options(info)
 
         thumb_url = info.get("thumbnail")
         if thumb_url:
@@ -399,7 +425,14 @@ class App(ctk.CTk):
         self.status_label.configure(text="Cancelled.")
 
     def _build_cmd(self, url):
-        cmd = [YTDLP, "--newline", "--no-playlist"]
+        cmd = [YTDLP, "--newline"]
+        
+        is_playlist = self.playlist_var.get()
+        if is_playlist:
+            cmd.append("--yes-playlist")
+        else:
+            cmd.append("--no-playlist")
+
         audio_only = self.format_seg.get() == "Audio"
 
         if audio_only:
@@ -425,7 +458,12 @@ class App(ctk.CTk):
             else:
                 cmd += ["--write-sub", "--sub-lang", lang]
 
-        cmd += ["-o", os.path.join(self.download_dir, "%(title)s.%(ext)s")]
+        if is_playlist:
+            out_tmpl = os.path.join(self.download_dir, "%(playlist_title)s", "%(playlist_index)s - %(title)s.%(ext)s")
+        else:
+            out_tmpl = os.path.join(self.download_dir, "%(title)s.%(ext)s")
+
+        cmd += ["-o", out_tmpl]
         cmd.append(url)
         return cmd
 
