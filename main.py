@@ -75,6 +75,7 @@ class App(ctk.CTk):
         self.is_downloading = False
         self.process = None
         self.history: list[dict] = []
+        self.fetch_timer = None
 
         self._build_ui()
 
@@ -107,16 +108,21 @@ class App(ctk.CTk):
         frame.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 8))
         frame.grid_columnconfigure(0, weight=1)
 
+        self.url_var = ctk.StringVar()
+        self.url_var.trace_add("write", self._on_url_change)
+
         self.url_entry = ctk.CTkEntry(frame, placeholder_text="Paste a YouTube URL...", height=40)
         self.url_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+
+        self.url_entry.bind("<KeyRelease>", lambda e: self._fetch_info())
         self.url_entry.bind("<Return>", lambda e: self._fetch_info())
 
         paste_btn = ctk.CTkButton(frame, text="Paste", width=90, height=40, command=self._paste_url)
         paste_btn.grid(row=0, column=1)
 
-        fetch_btn = ctk.CTkButton(frame, text="Fetch", width=90, height=40,
-                                  fg_color="#2ecc71", hover_color="#27ae60", command=self._fetch_info)
-        fetch_btn.grid(row=0, column=2, padx=(8, 0))
+        #fetch_btn = ctk.CTkButton(frame, text="Fetch", width=90, height=40,
+        #                          fg_color="#2ecc71", hover_color="#27ae60", command=self._fetch_info)
+        #fetch_btn.grid(row=0, column=2, padx=(8, 0))
 
     # -- Preview --
     def _build_preview(self, parent):
@@ -289,6 +295,28 @@ class App(ctk.CTk):
     @staticmethod
     def _short_path(p):
         return "..." + p[-37:] if len(p) > 40 else p
+    
+    # On URL Change 
+    def _on_url_change(self, *args):
+        if hasattr(self, "_fetch_timer") and self._fetch_timer:
+            self.after_cancel(self._fetch_timer)
+            self._fetch_timer = None
+
+        url = self.url_var.get().strip()
+
+        if url and (url.startswith("http")  or "youtube.com" in url or "youtu.be" in url):
+            if self.video_info and (self.video_info.get("webpage_url") == url or self.video_info.get("original_url") == url):
+                return
+            self._fetch_timer = self.after(800, self._fetch_info)
+
+    def _check_and_fetch(self):
+        url = self.url_entry.get().strip()
+        if url and (url.startswith("http") or "youtube.com" in url or "youtu.be" in url):
+            if hasattr(self, "_last_fetched_url") and self._last_fetched_url == url:
+                return
+            
+            self._last_fetched_url = url
+            self._fetch_info()
 
     # ── Paste ────────────────────────────────────────────────────────────
 
@@ -300,14 +328,20 @@ class App(ctk.CTk):
         if clip:
             self.url_entry.delete(0, "end")
             self.url_entry.insert(0, clip.strip())
+            self._last_fetched_url = clip.strip()
             self._fetch_info()
+
 
     # ── Fetch info ───────────────────────────────────────────────────────
 
     def _fetch_info(self):
+        if hasattr(self, "_fetch_timer") and self._fetch_timer:
+            self.after_cancel(self._fetch_timer)
+            self._fetch_timer = None
         url = self.url_entry.get().strip()
         if not url:
             return
+        self._last_fetched_url = url
         self.title_label.configure(text="Fetching info...")
         self.channel_label.configure(text="")
         self.duration_label.configure(text="")
